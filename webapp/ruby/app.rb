@@ -2,6 +2,7 @@ require 'digest/sha1'
 require 'mysql2'
 require 'sinatra/base'
 require 'logger'
+require 'pry'
 
 INITIAL_NUM_CONNECTION = 20
 
@@ -215,22 +216,28 @@ class App < Sinatra::Base
     rows = db.query('SELECT id FROM channel').to_a
     channel_ids = rows.map { |row| row['id'] }
 
+    statement = db.prepare("
+      SELECT channel_id, COUNT(*) as cnt FROM
+        (SELECT
+          message.channel_id,
+          message.id AS message_id,
+          IFNULL(haveread.message_id, 0) AS partition_message_id
+        FROM message LEFT JOIN (SELECT * FROM haveread WHERE haveread.user_id = ?) AS haveread
+        ON message.channel_id = haveread.channel_id)
+        AS message_tbl
+      WHERE partition_message_id < message_id
+      GROUP BY channel_id;")
+    unread_dict = {}
+    statement.execute(user_id).map { |row| unread_dict[row['channel_id']] = row['cnt'] }
+    statement.close
+
     res = []
     channel_ids.each do |channel_id|
-      statement = db.prepare('SELECT * FROM haveread WHERE user_id = ? AND channel_id = ?')
-      row = statement.execute(user_id, channel_id).first
-      statement.close
-      r = {}
-      r['channel_id'] = channel_id
-      r['unread'] = if row.nil?
-        statement = db.prepare('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?')
-        statement.execute(channel_id).first['cnt']
+      if unread_dict.has_key?(channel_id)
+        res << {'channel_id' => channel_id, 'unread' => unread_dict[channel_id]}
       else
-        statement = db.prepare('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id')
-        statement.execute(channel_id, row['message_id']).first['cnt']
+        res << {'channel_id' => channel_id, 'unread' => 0}
       end
-      statement.close
-      res << r
     end
 
     content_type :json
