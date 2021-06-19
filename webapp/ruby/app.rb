@@ -394,11 +394,9 @@ class App < Sinatra::Base
     mime = ext2mime(ext)
     imgs_path = "./public/imgs/#{file_name}"
     if File.file?(imgs_path) && File.exist?(imgs_path) && !mime.empty?
-      # puts imgs_path
       content_type mime
-      # cache_control :public, :max_age => 86400
-      # puts File::Stat.new(imgs_path).mtime
-      # last_modified File::Stat.new(imgs_path).mtime
+      cache_control :public, :max_age => 86400
+      last_modified File::Stat.new(imgs_path).mtime
       return File.open(imgs_path, 'r')
     end
     404
