@@ -1,6 +1,7 @@
 require 'digest/sha1'
 require 'mysql2'
 require 'sinatra/base'
+require 'logger'
 
 class App < Sinatra::Base
   configure do
@@ -9,11 +10,18 @@ class App < Sinatra::Base
     set :avatar_max_size, 1 * 1024 * 1024
 
     enable :sessions
+
+    log_dir = "#{root}/log"
+    Dir.mkdir(log_dir) unless Dir.exists?(log_dir)
+    file = File.new("#{log_dir}/#{environment}.log", 'a+')
+    file.sync = true
+    use Rack::CommonLogger, file
   end
 
   configure :development do
     require 'sinatra/reloader'
     register Sinatra::Reloader
+    set :logging, Logger::DEBUG
   end
 
   helpers do
