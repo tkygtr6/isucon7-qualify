@@ -3,6 +3,52 @@ require 'mysql2'
 require 'sinatra/base'
 require 'logger'
 
+INITIAL_NUM_CONNECTION = 20
+
+$db_conn_pools = Queue.new
+$db_conn_thread_mapper = {}
+
+def create_db_conn
+    db_conn =  Mysql2::Client.new(
+      host: ENV.fetch('ISUBATA_DB_HOST') { 'localhost' },
+      port: ENV.fetch('ISUBATA_DB_PORT') { '3306' },
+      username: ENV.fetch('ISUBATA_DB_USER') { 'root' },
+      password: ENV.fetch('ISUBATA_DB_PASSWORD') { '' },
+      database: 'isubata',
+      encoding: 'utf8mb4'
+    )
+    puts "created db_client"
+    db_conn.query('SET SESSION sql_mode=\'TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY\'')
+    db_conn
+end
+
+def init_db_conn_pool
+  puts "Begin init_db_conn_pool"
+  INITIAL_NUM_CONNECTION.times do |i|
+    $db_conn_pools << create_db_conn()
+  end
+  puts "Finished init_db_conn_pool"
+end
+
+def get_db_conn_from_db_conn_pool
+  begin
+    conn = $db_conn_pools.pop(non_block=true)
+    conn
+  rescue ThreadError
+    conn = create_db_conn()
+    conn
+  end
+end
+
+def db
+  t_id = Thread.current.object_id
+  unless $db_conn_thread_mapper.has_key?(t_id)
+    puts "Not defined: #{t_id}"
+    $db_conn_thread_mapper[t_id] = get_db_conn_from_db_conn_pool()
+  end
+  $db_conn_thread_mapper[t_id]
+end
+
 class App < Sinatra::Base
   configure do
     set :session_secret, 'tonymoris'
@@ -16,6 +62,8 @@ class App < Sinatra::Base
     file = File.new("#{log_dir}/#{environment}.log", 'a+')
     file.sync = true
     use Rack::CommonLogger, file
+
+    init_db_conn_pool
   end
 
   configure :development do
@@ -341,27 +389,15 @@ class App < Sinatra::Base
     if File.file?(imgs_path) && File.exist?(imgs_path) && !mime.empty?
       # puts imgs_path
       content_type mime
-      return File.open("public/imgs/#{file_name}", 'r')
+      # cache_control :public, :max_age => 86400
+      # puts File::Stat.new(imgs_path).mtime
+      # last_modified File::Stat.new(imgs_path).mtime
+      return File.open(imgs_path, 'r')
     end
     404
   end
 
   private
-
-  def db
-    return @db_client if defined?(@db_client)
-
-    @db_client = Mysql2::Client.new(
-      host: ENV.fetch('ISUBATA_DB_HOST') { 'localhost' },
-      port: ENV.fetch('ISUBATA_DB_PORT') { '3306' },
-      username: ENV.fetch('ISUBATA_DB_USER') { 'root' },
-      password: ENV.fetch('ISUBATA_DB_PASSWORD') { '' },
-      database: 'isubata',
-      encoding: 'utf8mb4'
-    )
-    @db_client.query('SET SESSION sql_mode=\'TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY\'')
-    @db_client
-  end
 
   def db_get_user(user_id)
     statement = db.prepare('SELECT * FROM user WHERE id = ?')
