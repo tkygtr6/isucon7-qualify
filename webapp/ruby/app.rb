@@ -170,7 +170,6 @@ class App < Sinatra::Base
 
   get '/message' do
     user_id = session[:user_id]
-    puts user_id
     if user_id.nil?
       return 403
     end
@@ -205,12 +204,12 @@ class App < Sinatra::Base
                               ON message.user_id = user.id
                               ORDER BY id DESC')
       response = statement.execute(*ids).map { |row|
-        {'id': row['id'],
-         'user': {'name': row['name'],
-                  'display_name': row['display_name'],
-                  'avatar_icon': row['avatar_icon']},
-         'date': row['date'].strftime("%Y/%m/%d %H:%M:%S"),
-         'content': row['content']} }
+        {'id' => row['id'],
+         'user' => {'name' => row['name'],
+                  'display_name' => row['display_name'],
+                  'avatar_icon' => row['avatar_icon']},
+         'date' => row['date'].strftime("%Y/%m/%d %H:%M:%S"),
+         'content' => row['content']} }
       statement.close
       response.reverse!
     end
@@ -234,7 +233,7 @@ class App < Sinatra::Base
       return 403
     end
 
-    sleep 4.0
+    sleep 1.0
 
     rows = db.query('SELECT id FROM channel').to_a
     channel_ids = rows.map { |row| row['id'] }
@@ -285,17 +284,38 @@ class App < Sinatra::Base
 
     n = 20
     statement = db.prepare('SELECT * FROM message WHERE channel_id = ? ORDER BY id DESC LIMIT ? OFFSET ?')
-    rows = statement.execute(@channel_id, n, (@page - 1) * n).to_a
+    ids = statement.execute(@channel_id, n, (@page - 1) * n).map { |row| row['id'] }
     statement.close
     @messages = []
-    rows.each do |row|
-      r = {}
-      r['id'] = row['id']
-      statement = db.prepare('SELECT name, display_name, avatar_icon FROM user WHERE id = ?')
-      r['user'] = statement.execute(row['user_id']).first
-      r['date'] = row['created_at'].strftime("%Y/%m/%d %H:%M:%S")
-      r['content'] = row['content']
-      @messages << r
+
+    unless ids.empty?
+      statement = db.prepare('SELECT
+                                message.id AS id,
+                                message.created_at AS date,
+                                message.content AS content,
+                                user.name AS name,
+                                user.display_name AS display_name,
+                                user.avatar_icon AS avatar_icon
+                              FROM (
+                                SELECT *
+                                FROM message
+                                WHERE id IN (' + (['?'] * ids.size).join(",") + ') ) AS message
+                              LEFT JOIN (
+                                SELECT
+                                  id,
+                                  name,
+                                  display_name,
+                                  avatar_icon
+                                FROM user) AS user
+                              ON message.user_id = user.id
+                              ORDER BY id DESC')
+      @messages = statement.execute(*ids).map { |row|
+        {'id' => row['id'],
+         'user' => {'name' => row['name'],
+                  'display_name' => row['display_name'],
+                  'avatar_icon' => row['avatar_icon']},
+         'date' => row['date'].strftime("%Y/%m/%d %H:%M:%S"),
+         'content' => row['content']} }
       statement.close
     end
     @messages.reverse!
