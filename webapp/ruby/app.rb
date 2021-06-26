@@ -412,7 +412,7 @@ class App < Sinatra::Base
     end
 
     if !avatar_name.nil? && !avatar_data.nil?
-      File.open("./public/imgs/#{avatar_name}", 'wb') do |f|
+      File.open("/home/isucon/isubata/webapp/public/icons/#{avatar_name}", 'wb') do |f|
         f.write(data)
       end
 
@@ -430,20 +430,20 @@ class App < Sinatra::Base
     redirect '/', 303
   end
 
-  get '/icons/:file_name' do
-    file_name = params[:file_name]
+  #get '/icons/:file_name' do
+    #file_name = params[:file_name]
 
-    ext = file_name.include?('.') ? File.extname(file_name) : ''
-    mime = ext2mime(ext)
-    imgs_path = "./public/imgs/#{file_name}"
-    if File.file?(imgs_path) && File.exist?(imgs_path) && !mime.empty?
-      content_type mime
-      cache_control :public, :max_age => 86400
-      last_modified File::Stat.new(imgs_path).mtime
-      return File.open(imgs_path, 'r')
-    end
-    404
-  end
+    #ext = file_name.include?('.') ? File.extname(file_name) : ''
+    #mime = ext2mime(ext)
+    #imgs_path = "./public/imgs/#{file_name}"
+    #if File.file?(imgs_path) && File.exist?(imgs_path) && !mime.empty?
+      #content_type mime
+      #cache_control :public, :max_age => 86400
+      #last_modified File::Stat.new(imgs_path).mtime
+      #return File.open(imgs_path, 'r')
+    #end
+    #404
+  #end
 
   private
 
