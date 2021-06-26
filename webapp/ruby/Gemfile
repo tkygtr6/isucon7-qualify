@@ -4,3 +4,6 @@ gem 'mysql2'
 gem 'puma'
 gem 'sinatra'
 gem 'sinatra-contrib'
+
+gem "ruby-prof", "~> 1.4"
+gem "pry", "~> 0.14.1"
